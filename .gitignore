@@ -1,0 +1,13 @@
+# user config (templates with .example.* are committed)
+config/*
+!config/README.md
+!config/*.example.*
+
+# generated artifacts — fully local
+jobs/
+applications/
+
+# OS / editor cruft
+.DS_Store
+.vscode/
+*.swp
