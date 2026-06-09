@@ -39,7 +39,7 @@ Job-Seeker/
 │       ├── network-check.md             # Tier 1 network-proximity helper
 │       ├── build-connections.md         # populate connections.csv from LinkedIn
 │       ├── rate-connections.md          # interactive rating walk-through
-│       ├── draft-application.md         # tailored resume + cover letter
+│       ├── draft-tailored-resume-coverletter.md  # tailored resume + cover letter (markdown; DOCX opt-in)
 │       ├── research-network.md          # Tier 2 deep network research per job
 │       ├── mark-applied.md              # record an outcome: applied
 │       ├── mark-passed.md               # record an outcome: passed
@@ -80,7 +80,7 @@ Job-Seeker/
 - `/setup` — first-run guided configuration (see .claude/skills/setup.md)
 - `/scan-jobs` — find new postings (see .claude/skills/scan-jobs.md)
 - `/score-jobs` — rank the inbox (see .claude/skills/score-jobs.md)
-- `/draft-application <rank>` — generate tailored resume + cover letter
+- `/draft-tailored-resume-coverletter <rank>` — generate tailored resume + cover letter for a scored job (the user still submits the actual application themselves)
 - `/mark-applied <rank>` and `/mark-passed <rank>` — track outcomes
 - `/rescore` — re-score the inbox after criteria changes
 

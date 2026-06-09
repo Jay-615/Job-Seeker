@@ -130,7 +130,7 @@ Tell the user: "I saved your contact info to `config/settings.md` so you don't l
 
 ## Stage 4 — Base resume path → `config/settings.md`
 
-Goal: capture the absolute path to the user's existing base resume file (Markdown, DOCX, or PDF — the user keeps editing the source themselves; `/draft-application` reads from it).
+Goal: capture the absolute path to the user's existing base resume file (Markdown, DOCX, or PDF — the user keeps editing the source themselves; `/draft-tailored-resume-coverletter` reads from it).
 
 Ask:
 

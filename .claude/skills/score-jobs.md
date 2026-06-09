@@ -68,7 +68,7 @@ Sub-components (use judgment on internal weighting — the spec says implementer
 
 Combine into a single 0–100 number. Round to an integer. Write a short reasoning paragraph **per sub-component** in the per-job file (see Step 2 for the structure).
 
-**Don't fabricate experience the user doesn't have.** If the JD asks for something the resume doesn't show, score it as a gap and call it out in the narrative. This is the same principle as `/draft-application`.
+**Don't fabricate experience the user doesn't have.** If the JD asks for something the resume doesn't show, score it as a gap and call it out in the narrative. This is the same principle as `/draft-tailored-resume-coverletter`.
 
 ### 1b. Network proximity (0–100)
 
@@ -199,7 +199,7 @@ Write `jobs/scored/dashboard-<today_iso>.md` with this structure:
 
 ## Notes
 
-- Jobs marked ⭐ are at or above the threshold of {{threshold}} and are eligible for `/draft-application <rank>`.
+- Jobs marked ⭐ are at or above the threshold of {{threshold}} and are eligible for `/draft-tailored-resume-coverletter <rank>`.
 - Per-job reasoning lives in `jobs/scored/<id>.md` — open the one you want to dig into.
 - {{If any network sub-score is null:}} {{N}} job(s) couldn't be network-scored this run (see per-job files for why). Use `/rescore` after fixing the issue.
 ```
@@ -227,7 +227,7 @@ Scored {{N}} postings.
 Dashboard written to jobs/scored/dashboard-{{today_iso}}.md.
 Per-job reasoning written to jobs/scored/<id>.md.
 
-Next: pick a ⭐ rank and run /draft-application <rank>.
+Next: pick a ⭐ rank and run /draft-tailored-resume-coverletter <rank>.
 ```
 
 If there are zero ⭐ jobs, end with:
