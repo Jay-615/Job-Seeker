@@ -11,3 +11,4 @@ yourself.
 
 > **Note:** This README is a placeholder. The full version — setup walkthrough,
 > weekly usage guide, architecture notes, and FAQ — ships in module M7.
+
