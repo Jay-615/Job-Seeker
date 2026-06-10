@@ -72,12 +72,16 @@ You end up with `len(roles) × 2` queries — for Jay's current criteria, that's
 ### 1b. For each query
 
 1. Navigate to the URL. Wait ~2–3 seconds for React to render.
-2. Use `mcp__Claude_in_Chrome__javascript_tool` to extract candidate cards:
+2. Use `mcp__Claude_in_Chrome__javascript_tool` to extract candidate cards. **Note the noise-line filter and the `with verification` line drop** — without them, the field-tested LinkedIn DOM order `[title, "<title> with verification", company, location, ...]` pushes company into the title slot and location into the company slot.
 
    ```javascript
    (function() {
      window.scrollTo(0, document.body.scrollHeight);
      const out = [];
+     // Lines that appear inside cards but are chrome/badges, not title/company/location.
+     const noise = /^(promoted|easy apply|viewed|be an early applicant|actively reviewing applicants|medical|401\(k\)|· \d+|\d+ applicants?|new|company logo)$/i;
+     // LinkedIn inserts an accessibility alt-label "<title> with verification" between the visible title and the company line.
+     const isVerifLine = (l) => /\bwith verification$/i.test(l);
      // Each result card carries the canonical /jobs/view/<id> link.
      const links = Array.from(document.querySelectorAll('a[href*="/jobs/view/"]'));
      const seen = new Set();
@@ -88,12 +92,15 @@ You end up with `len(roles) × 2` queries — for Jay's current criteria, that's
        if (seen.has(id)) continue;
        seen.add(id);
        const card = a.closest('li') || a.closest('div');
-       const text = (card ? card.innerText : '').split('\n').map(s => s.trim()).filter(Boolean);
-       // First two non-empty lines are usually title then company.
+       let lines = (card ? card.innerText : '').split('\n').map(s => s.trim()).filter(Boolean);
+       lines = lines.filter(l => !noise.test(l) && !isVerifLine(l));
+       const title = lines[0] || '';
+       const company = lines[1] || '';
+       const location = lines[2] || '';
        out.push({
          id, url: `https://www.linkedin.com/jobs/view/${id}`,
-         title: text[0] || '', company: text[1] || '',
-         location: text[2] || '', text_excerpt: text.slice(0, 8).join(' | ')
+         title, company, location,
+         text_excerpt: lines.slice(0, 8).join(' | ')
        });
      }
      return out;
@@ -102,31 +109,76 @@ You end up with `len(roles) × 2` queries — for Jay's current criteria, that's
 
 3. The card excerpt holds enough to apply title-category, seniority, and basic location filters. **Don't open every job detail page** — that's the expensive trap. Open the JD only for cards that pass the cheap filters AND aren't already in `seen.json`.
 
+### 1b-pagination — when to load page 2
+
+Page 1 commonly returns only a handful of cards because LinkedIn loads "Promoted" cards into the top slots and pushes the organic results onto pages 2 and 3. The previous heuristic ("only paginate if page 1 returned the maximum result count") therefore missed most of the organic inventory.
+
+Replacement rule: **if page 1 returns fewer cards than the page header's total result count AND a `Page 2` link is present in the pagination strip, paginate.** Stop at page 3 or when no `Next` is visible.
+
+Parse the header total and detect the Page 2 link from `main.innerText`:
+
+```javascript
+(function() {
+  const text = (document.querySelector('main') || document.body).innerText || '';
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  // The header line looks like "26 results" or "About 1,200 results".
+  const headerLine = lines.find(l => /^(?:about\s+)?[\d,]+\s+results?$/i.test(l));
+  const header_total = headerLine ? parseInt(headerLine.replace(/[^\d]/g, ''), 10) : null;
+  // Pagination strip renders the page numbers as standalone digit lines plus "Next".
+  const has_page_2 = lines.some(l => /^2$/.test(l)) || /\bPage\s+2\b/.test(text);
+  const has_next = /\bNext\b/.test(text);
+  return { header_total, has_page_2, has_next };
+})()
+```
+
+Pagination URL formatter for LinkedIn: append `&start=<n>` where `n = 25 * (page - 1)`. Page 2 is `&start=25`, page 3 is `&start=50`. Re-run the cards extractor against the same URL with `start` appended, accumulate de-duped cards across pages (the `seen` Set is per-page; carry an outer set across pages keyed on the canonical `/jobs/view/<id>` URL), and stop after page 3.
+
 ### 1c. Fetch survivor JDs
 
 For each card that passes the cheap filters and is new:
 
 1. Navigate to its `/jobs/view/<id>` URL. Wait ~2 seconds.
-2. Extract the JD body and metadata with one `javascript_tool` call:
+2. Extract the JD body and metadata with one `javascript_tool` call. **Two things to note vs. a naive version:**
+
+   - **Title and company come from `document.title`, not `<h1>`.** As of June 2026 LinkedIn's `<h1>` on the job detail page renders the **company name**, not the job title. `document.title` reliably formats as `<job title> | <company> | LinkedIn`.
+   - **Detect "Promoted by hirer · Responses managed off LinkedIn" before attempting body extraction.** These postings link out to the hirer's external ATS; LinkedIn renders only the meta header and an Apply button, with no `About the job` section. Trying to extract a body returns ~1.3K chars of meta-only noise.
 
    ```javascript
    (function() {
      const main = document.querySelector('main') || document.body;
-     const lines = (main.innerText || '').split('\n').map(s => s.trim()).filter(Boolean);
-     const titleEl = document.querySelector('h1');
-     const title = titleEl ? titleEl.innerText.trim() : (lines[0] || '');
+     const fullText = main.innerText || '';
+     const lines = fullText.split('\n').map(s => s.trim()).filter(Boolean);
+
+     // Title + company from document.title (reliable across the current LinkedIn rev).
+     const dtMatch = document.title.match(/^(.+?)\s\|\s(.+?)\s\|\sLinkedIn$/);
+     const title = dtMatch ? dtMatch[1] : (lines[0] || '');
+     const company = dtMatch ? dtMatch[2] : '';
+
      // Posted-time excerpt is usually a phrase like "Posted 3 days ago" near the top.
      const postedLine = lines.find(l => /posted|reposted/i.test(l)) || '';
      // Salary / comp text appears in a "Pay range provided by employer" block when disclosed.
      const compLine = lines.find(l => /\$[\d,]+(\.\d+)?\s*(\/\s*(hr|hour|yr|year))?(\s*-\s*\$[\d,]+)?/i.test(l)) || '';
-     // The JD body is the big block of text after the meta header.
-     const aboutIdx = lines.findIndex(l => /^about the job$/i.test(l));
-     const body = aboutIdx >= 0 ? lines.slice(aboutIdx + 1).join('\n\n') : lines.slice(0, 200).join('\n\n');
-     return { title, postedLine, compLine, body, all_chars: (main.innerText || '').length };
+
+     // Off-LinkedIn promoted postings host their JD on the hirer's ATS, not on LinkedIn.
+     const off_linkedin = /responses managed off linkedin/i.test(fullText);
+
+     // The JD body is the big block of text after the meta header — but only when LinkedIn hosts it.
+     let body = '';
+     if (!off_linkedin) {
+       const aboutIdx = lines.findIndex(l => /^about the job$/i.test(l));
+       body = aboutIdx >= 0 ? lines.slice(aboutIdx + 1).join('\n\n') : lines.slice(0, 200).join('\n\n');
+     }
+     return { title, company, postedLine, compLine, body, off_linkedin, all_chars: fullText.length };
    })()
    ```
 
-3. Pace: wait 2–3 seconds between consecutive job-detail loads. Never more than ~15 detail loads per minute. If you spot a CAPTCHA or rate-limit interstitial, stop LinkedIn scanning for this run and note it in the run summary.
+3. **If `off_linkedin === true`:** skip body extraction, set `jd_body = ""`, and add a `Notes` line on the inbox file:
+
+   > JD body not on LinkedIn page (Promoted by hirer + off-LinkedIn responses). Follow the URL above and click Apply to read the full JD.
+
+   Optional follow-up (post-v1): grab the `Apply` button's `href`, navigate to the hirer's ATS, and try to extract the JD there. Out of scope for the current cut — flagging in the inbox is honest enough.
+
+4. Pace: wait 2–3 seconds between consecutive job-detail loads. Never more than ~15 detail loads per minute. If you spot a CAPTCHA or rate-limit interstitial, stop LinkedIn scanning for this run and note it in the run summary.
 
 ### 1d. Normalize each candidate into the common record
 
@@ -567,10 +619,12 @@ These are the page-structure assumptions this skill carries. When a site changes
 
 ### LinkedIn
 
-1. **Jobs search URL** — `https://www.linkedin.com/jobs/search/?keywords=<q>&location=<loc>&distance=<mi>&f_TPR=r<sec>&f_WT=<mode>`. `f_WT` codes: `1` = Onsite, `2` = Remote, `3` = Hybrid (combinable, e.g., `f_WT=2%2C3`). `f_TPR=r604800` = past week.
-2. **Result-card link** — `<a href="/jobs/view/<id>...">` anchored inside an `<li>`. The first 3 non-empty `innerText` lines of the card are typically `[title, company, location]`.
-3. **Detail page** — `<h1>` is the job title. The block under "About the job" is the JD. The salary/comp string, when disclosed, lives in a "Pay range provided by employer" block somewhere in the upper third of the page.
+1. **Jobs search URL** — `https://www.linkedin.com/jobs/search/?keywords=<q>&location=<loc>&distance=<mi>&f_TPR=r<sec>&f_WT=<mode>`. `f_WT` codes: `1` = Onsite, `2` = Remote, `3` = Hybrid (combinable, e.g., `f_WT=2%2C3`). `f_TPR=r604800` = past week. Pagination via `&start=<n>` where `n = 25 * (page - 1)`.
+2. **Result-card link** — `<a href="/jobs/view/<id>...">` anchored inside an `<li>`. The card's text lines include accessibility/badge noise (`Promoted`, `Easy Apply`, `<title> with verification`, applicant counts, etc.) that must be filtered before pairing fields. After filtering, the first 3 lines are `[title, company, location]`. See Step 1b for the noise regex.
+3. **Detail page title and company** — `document.title` is reliably formatted as `<job title> | <company> | LinkedIn` and is the canonical source. The page's `<h1>` is the **company name** as of June 2026, not the job title, so do not use `<h1>` for the title. The block under "About the job" is the JD body. The salary/comp string, when disclosed, lives in a "Pay range provided by employer" block somewhere in the upper third of the page.
 4. **Posted-date phrasing** — "Posted N days/weeks ago" or "Reposted N days ago". Use this for `posted_date`.
+5. **"Promoted by hirer · Responses managed off LinkedIn"** — a class of postings where LinkedIn hosts only the meta header + an Apply button; the actual JD lives on the hirer's external ATS. The page text contains the literal phrase "Responses managed off LinkedIn." Detect this *before* attempting body extraction (`main.innerText` would otherwise return ~1.3K chars of meta-only noise that looks like a successful parse). When detected, write the inbox file with `jd_body = ""` and a `## Notes` line pointing the user at the Apply link for the real JD.
+6. **Page header total** — the results page renders a line like `"26 results"` (or `"About 1,200 results"`) above the card list. Use this for pagination decisions: if cards-seen < header total AND a `Page 2` link is present, paginate. Stop at page 3 or when `Next` is gone. See Step 1b-pagination.
 
 ### Indeed
 

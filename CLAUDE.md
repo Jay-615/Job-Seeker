@@ -91,7 +91,20 @@ Job-Seeker/
   `applications/` (also gitignored).
 - Markdown is the source of truth for resumes and cover letters; DOCX is generated.
 - Hard filters drop misfits before scoring; soft scores rank survivors.
-  See docs/scoring-methodology.md.
+  See `docs/scoring-methodology.md`.
+- The tool is deliberately not an auto-applier and not a scheduled job — see
+  `docs/humans-in-the-loop.md` for the rationale behind where humans stay in
+  the loop. `docs/architecture.md` summarizes the runtime and design decisions.
+
+## Writing preferences (Jay's voice)
+
+When generating user-facing copy (resume bullets, cover-letter language, run
+summaries, `notes.md` files):
+
+- **Spell Kasada with a K**, not a C. If the user's base resume contains the
+  misspelling, quietly correct it.
+- **Don't use "spend" as a noun.** Use "cost" or "expenditure" instead.
+- Tone is clear, confident, occasionally personal. Not corporate marketing.
 
 ## When a user opens this project for the first time
 
