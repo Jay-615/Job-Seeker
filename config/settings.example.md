@@ -33,6 +33,7 @@ what `/setup` would write.*
 ## Network Proximity
 - network_cache_days: 30        # reuse cached network analysis per company within N days
 - include_deep_research_default: false  # /score-jobs does NOT auto-trigger Tier 2 deep research
+- research_profile_cap: 10      # /research-network visits at most N 2nd-degree profiles per run
 
 ## Output
 - Resume formats: markdown, docx
