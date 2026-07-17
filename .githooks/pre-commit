@@ -5,8 +5,12 @@
 # people in the user's network — so it is also the exact list of names that must
 # never appear in a tracked file. This hook checks one against the other.
 #
-# It exists because commit bb3408f ("portfolio polish") published six real
-# colleagues' names in docs/ and nobody noticed for weeks.
+# It exists because a commit titled "portfolio polish" published seven real
+# people's names in docs/ and nobody noticed for weeks.
+#
+# KNOWN BLIND SPOT: this only knows 1st/2nd degrees. Two of those seven were
+# candidates from a /research-network run — real people, in neither CSV, invisible
+# here. A clean run does not mean a clean commit.
 #
 # Install: git config core.hooksPath .githooks
 # Bypass:  git commit --no-verify   (you had better be sure)

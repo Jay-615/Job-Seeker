@@ -101,9 +101,9 @@ Use the fictional persona from `config/*.example.*` (Sam Chen and colleagues)
 instead. Same for real employer names tied to the user's actual search, real
 profile slugs, and real home-directory paths.
 
-**This rule exists because it was broken.** Commit `bb3408f` — titled "portfolio
-polish," whose whole purpose was making the repo presentable — published six real
-colleagues' names and two profile slugs in `docs/`. It stayed public for weeks.
+**This rule exists because it was broken.** The commit titled "portfolio
+polish," whose whole purpose was making the repo presentable — published seven real
+people's names and two profile slugs in `docs/`. It stayed public for weeks.
 
 Understand *how* that happens, because the pull is real and it will pull on you
 too. The leaking lines were a smoke-test bug report, shaped like this:
@@ -127,6 +127,14 @@ above. It is easy to fall into. It was fallen into while drafting this paragraph
 `.gitignore` will not save you here. It protects *files*, and it has done its job
 perfectly — no gitignored file has ever leaked. It cannot protect against a name
 typed into a sentence. That's a judgment call, and it's yours.
+
+**Do not trust the hook to know who is a real person.** It checks against
+`connections.csv` and `company_connections.csv` — your 1st and 2nd degrees. But the
+riskiest names aren't there. Two of the seven leaked names were *candidates* from a
+`/research-network` run: real people whose profiles were visited but who were never
+in either file. The hook was blind to them, and so was the audit that first claimed
+the repo was clean. If you are writing about someone the tool encountered at
+runtime, the hook will not save you. Only not typing the name will.
 
 A `pre-commit` hook (`.githooks/pre-commit`) checks staged files against the names
 in `connections.csv` and blocks the commit. Treat it as a backstop for mistakes,
