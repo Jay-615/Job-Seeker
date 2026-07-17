@@ -7,6 +7,9 @@ config/*
 jobs/
 applications/
 
+# local working notes — never publish
+GITHUB-SUPPORT-REQUEST.md
+
 # OS / editor cruft
 .DS_Store
 .vscode/
