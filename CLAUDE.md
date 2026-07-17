@@ -41,6 +41,7 @@ Job-Seeker/
 │       ├── rate-connections.md          # interactive rating walk-through
 │       ├── draft-tailored-resume-coverletter.md  # tailored resume + cover letter (markdown; DOCX opt-in)
 │       ├── research-network.md          # Tier 2 deep network research per job
+│       ├── map-company-connections.md   # find + document 2nd-degree connections per company → company_connections.csv
 │       ├── mark-applied.md              # record an outcome: applied
 │       ├── mark-passed.md               # record an outcome: passed
 │       └── rescore.md                   # re-score the inbox after criteria changes
@@ -51,7 +52,8 @@ Job-Seeker/
 │   ├── target_companies.example.csv     # committed; fictional persona
 │   ├── target_companies.csv             # GITIGNORED (user's actual)
 │   ├── connections.example.csv          # committed; fictional persona
-│   ├── connections.csv                  # GITIGNORED (user's actual)
+│   ├── connections.csv                  # GITIGNORED (user's actual; has cached member_id column)
+│   ├── company_connections.csv          # GITIGNORED — 2nd-degree connections mapped per company (from /map-company-connections)
 │   ├── settings.example.md              # committed; fictional persona
 │   └── settings.md                      # GITIGNORED (user's actual)
 ├── templates/
@@ -80,11 +82,57 @@ Job-Seeker/
 - `/setup` — first-run guided configuration (see .claude/skills/setup.md)
 - `/scan-jobs` — find new postings (see .claude/skills/scan-jobs.md)
 - `/score-jobs` — rank the inbox (see .claude/skills/score-jobs.md)
+- `/map-company-connections <company>` — map Jay's 2nd-degree connections at a company + the 1st-degree bridges to them, drill-in-complete, into `config/company_connections.csv` (the source of truth that `/network-check` scores from and `/research-network` plans outreach from)
 - `/draft-tailored-resume-coverletter <rank>` — generate tailored resume + cover letter for a scored job (the user still submits the actual application themselves)
 - `/mark-applied <rank>` and `/mark-passed <rank>` — track outcomes
 - `/rescore` — re-score the inbox after criteria changes
 
 ## Conventions
+
+### Never write a real person's name into a committed file
+
+**This repo is public.** Every file that is not gitignored is published to
+strangers the moment it's pushed.
+
+Real people's names — anyone in `config/connections.csv` or
+`config/company_connections.csv` — must never appear in any tracked file. Not in
+`docs/`, not in a skill file, not in a commit message, not in a code comment.
+Use the fictional persona from `config/*.example.*` (Sam Chen and colleagues)
+instead. Same for real employer names tied to the user's actual search, real
+profile slugs, and real home-directory paths.
+
+**This rule exists because it was broken.** Commit `bb3408f` — titled "portfolio
+polish," whose whole purpose was making the repo presentable — published six real
+colleagues' names and two profile slugs in `docs/`. It stayed public for weeks.
+
+Understand *how* that happens, because the pull is real and it will pull on you
+too. The leaking lines were a smoke-test bug report, shaped like this:
+
+> First extraction had [real name]'s profile_url pointing to `/in/[real slug]`
+> ([another real name], who's a mutual)…
+
+That's *good documentation*. The specific mismatched pairs are the evidence for
+the bug; naming them is what makes the finding credible instead of vague. The
+trap is that **accurate and publishable diverge the moment the subject is a real
+person**, and the instinct toward precision is exactly what walks you over the
+line. "Two of the user's mutuals" is marginally worse documentation and enormously
+better privacy. Take that trade every time. If a real name seems load-bearing to
+an explanation, that is the signal to stop, not to proceed.
+
+Note that this very section quotes the offending line with the names redacted —
+not because the shape of the sentence is secret, but because writing them out
+again to explain why you shouldn't write them out is exactly the trap described
+above. It is easy to fall into. It was fallen into while drafting this paragraph.
+
+`.gitignore` will not save you here. It protects *files*, and it has done its job
+perfectly — no gitignored file has ever leaked. It cannot protect against a name
+typed into a sentence. That's a judgment call, and it's yours.
+
+A `pre-commit` hook (`.githooks/pre-commit`) checks staged files against the names
+in `connections.csv` and blocks the commit. Treat it as a backstop for mistakes,
+not as the thing doing the thinking. It only knows names you've already scraped.
+
+### Other conventions
 
 - All user-specific data lives in `config/` (gitignored) and is populated by `/setup`.
 - Job postings and applications are written to local files under `jobs/` and

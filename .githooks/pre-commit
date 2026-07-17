@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# Block commits that would publish a real person's name.
+#
+# This repo is public. config/connections.csv (gitignored) is the list of real
+# people in the user's network — so it is also the exact list of names that must
+# never appear in a tracked file. This hook checks one against the other.
+#
+# It exists because commit bb3408f ("portfolio polish") published six real
+# colleagues' names in docs/ and nobody noticed for weeks.
+#
+# Install: git config core.hooksPath .githooks
+# Bypass:  git commit --no-verify   (you had better be sure)
+
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT" || exit 0
+
+# The name sources are gitignored, so they only exist on the owner's machine.
+# On a fresh clone there is nothing to check against — pass silently.
+SOURCES=()
+[ -f config/connections.csv ] && SOURCES+=(config/connections.csv)
+[ -f config/company_connections.csv ] && SOURCES+=(config/company_connections.csv)
+[ ${#SOURCES[@]} -eq 0 ] && exit 0
+
+STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -z "$STAGED" ] && exit 0
+
+python3 - "$STAGED" <<'PY'
+import csv, os, re, subprocess, sys
+
+staged = [p for p in sys.argv[1].splitlines() if p.strip()]
+
+def names_from(path, cols):
+    out = set()
+    if not os.path.exists(path):
+        return out
+    try:
+        with open(path, newline='', encoding='utf-8', errors='replace') as f:
+            for row in csv.DictReader(f):
+                for c in cols:
+                    v = (row.get(c) or '').strip()
+                    if not v:
+                        continue
+                    out.add(v)
+                    # "Sam Chen, PMP" -> also guard the bare "Sam Chen"
+                    base = re.split(r',', v)[0].strip()
+                    if base:
+                        out.add(base)
+    except Exception:
+        pass
+    return out
+
+real = names_from('config/connections.csv', ['name'])
+real |= names_from('config/company_connections.csv', ['person_name'])
+# Bridge lists are semicolon-joined names.
+if os.path.exists('config/company_connections.csv'):
+    with open('config/company_connections.csv', newline='', encoding='utf-8', errors='replace') as f:
+        for row in csv.DictReader(f):
+            for b in (row.get('bridge_connections') or '').split(';'):
+                b = b.strip()
+                if b:
+                    real.add(b)
+                    real.add(re.split(r',', b)[0].strip())
+
+# Short or single-token names cause false positives ("New Person", "Dan").
+# Require a full name with a space and enough length to be distinctive.
+real = {n for n in real if len(n) >= 8 and ' ' in n}
+if not real:
+    sys.exit(0)
+
+# Longest first so "Sam Chen, MA, PMP" reports before "Sam Chen".
+patterns = sorted(real, key=len, reverse=True)
+
+hits = []
+for path in staged:
+    if not os.path.exists(path):
+        continue
+    # The gitignored sources can never be staged, but be explicit.
+    if path.startswith('config/') and '.example.' not in path:
+        continue
+    try:
+        with open(path, encoding='utf-8', errors='replace') as f:
+            lines = f.readlines()
+    except Exception:
+        continue
+    for i, line in enumerate(lines, 1):
+        for n in patterns:
+            if n in line:
+                hits.append((path, i, n, line.strip()[:110]))
+                break
+
+if hits:
+    print()
+    print("  COMMIT BLOCKED — a real person's name would be published.")
+    print()
+    print("  This repo is public. These names come from your connections file:")
+    print()
+    for path, ln, name, text in hits:
+        print(f"    {path}:{ln}")
+        print(f"      {name}  ->  {text}")
+    print()
+    print("  Use the fictional persona from config/*.example.* instead (Sam Chen and")
+    print("  colleagues). A real name is never load-bearing enough to publish; if it")
+    print("  feels like it is, that is the signal to stop. See CLAUDE.md > Conventions.")
+    print()
+    print("  Override with --no-verify only if you are certain these are not real people.")
+    print()
+    sys.exit(1)
+PY
