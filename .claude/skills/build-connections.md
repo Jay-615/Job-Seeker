@@ -1,6 +1,6 @@
 ---
 name: build-connections
-description: Populate config/connections.csv from the user's 1st-degree LinkedIn connections. Uses Claude in Chrome to paginate through linkedin.com/mynetwork/invite-connect/connections/ at human pace, writes each connection to the CSV with rating=Unrated. Re-runnable — preserves existing ratings, only adds new connections. Optionally seeds rating=High from a user-provided meetings.csv file.
+description: Populate config/connections.csv from the user's 1st-degree LinkedIn connections. Uses Claude in Chrome to paginate through linkedin.com/mynetwork/invite-connect/connections/ at human pace, writes each connection to the CSV with rating=Unrated. Re-runnable — preserves existing ratings, only adds new connections. Optionally seeds rating=High from a meetings log, if config/settings.md sets meetings_seed_path.
 ---
 
 # /build-connections — populate connections.csv from LinkedIn
@@ -46,13 +46,17 @@ Then ask via `AskUserQuestion`: **Proceed** / **Cancel**. If Cancel, stop cleanl
 
 ---
 
-## Step 2 — Load existing CSV and optional Jay-specific seed
+## Step 2 — Load existing CSV and the optional meetings seed
 
 1. Read `config/connections.csv` if it exists. Parse it into a dict keyed by `linkedin_url`. If the file doesn't exist yet, start with an empty dict — you'll create the file from scratch in Step 6.
 
-2. Check whether `/Users/jayzambelli/Documents/Job Search/networking conversations/meetings.csv` exists. If it does, read the `contact_name` column and build a set of names to seed as `High`. If it doesn't exist, skip silently — this is a Jay-specific convenience and most users won't have this file.
+2. **Optional meetings seed.** If the user keeps a log of people they've actually spoken to, those are `High` connections by definition and shouldn't need re-rating by hand.
 
-   The matching rule is **full name, case-insensitive, trim whitespace**. So `"Bill Washburn"` in `meetings.csv` matches `"Bill Washburn"` (any case) on LinkedIn but not `"Bill W."` or `"William Washburn"`. This means partial entries in `meetings.csv` like `"Andreas"` or `"COO (name TBD)"` won't accidentally match anyone — that's intentional.
+   Read the optional `meetings_seed_path` setting from `config/settings.md`. If it's absent, or the file it points at doesn't exist, skip this silently — most users won't have one. If it resolves, read the `contact_name` column and build a set of names to seed as `High`.
+
+   The path lives in `settings.md` rather than here because it's personal and machine-specific — `settings.md` is gitignored, this skill file is not. Never hardcode a user's home directory into a committed file.
+
+   The matching rule is **full name, case-insensitive, trim whitespace**. A full name in the seed file matches the same full name (any case) on LinkedIn, but not an abbreviated or expanded variant — `"Sam Chen"` won't match `"Sam C."` or `"Samuel Chen"`. That's deliberate: it means partial or placeholder entries in the log (`"Andreas"`, `"COO (name TBD)"`) can't accidentally match a real person and mis-rate them. Under-matching is the safe failure here; over-matching silently marks a stranger as someone you know well.
 
 3. Hold the existing-rows dict and the seed-names set in memory; you'll apply them when merging in Step 5.
 
@@ -183,27 +187,58 @@ For each scraped `{linkedin_url, name, headline}`:
 
 1. **If `linkedin_url` already exists in the loaded existing-rows dict:** preserve the existing `rating`, `last_interaction`, and `notes`. Update `name` and `headline` to the scraped values (those can legitimately change — name change, job change). This is how re-running the skill preserves user ratings.
 
-2. **If it's a new row:** add it with `rating=Unrated`, `last_interaction=""`, `notes=""`. Then check the meetings.csv seed names from Step 2 — if the scraped `name` matches one (case-insensitive, trimmed), upgrade `rating=High`.
+2. **If it's a new row:** add it with `rating=Unrated`, `last_interaction=""`, `notes=""`. Then check the seed names from Step 2 — if the scraped `name` matches one (case-insensitive, trimmed), upgrade `rating=High`.
 
-   - Important: **only seed `High` on brand-new rows**, never overwrite an existing rating. If a name is in `meetings.csv` but the user previously rated them `Low` via `/rate-connections`, respect the user's rating.
+   - Important: **only seed `High` on brand-new rows**, never overwrite an existing rating. If a name is in the seed file but the user previously rated them `Low` via `/rate-connections`, respect the user's rating.
 
-3. Write the merged result to `config/connections.csv` using Python's `csv` module (safer than hand-building the file — names contain commas, headlines contain quotes). Use this exact column order: `linkedin_url,name,headline,rating,last_interaction,notes`. Quote all fields with `csv.QUOTE_MINIMAL`.
+3. Write the merged result using Python's `csv` module (safer than hand-building the file — names contain commas, headlines contain quotes).
 
-   Example one-shot script you can run via the `Bash` tool:
+   **Read the schema from the file; never hardcode it.** If `connections.csv` exists, its own header is the truth — take `fieldnames` from `csv.DictReader.fieldnames` and write those columns back. Only fall back to the default order below when creating the file from scratch:
+
+   ```
+   linkedin_url,name,headline,rating,last_interaction,notes
+   ```
+
+   This is not hypothetical. This file has already drifted from that default — it now carries a cached `member_id` column, and `rating`/`headline` sit in the opposite order. Hardcoding the documented list against the real file doesn't fail cleanly: `DictWriter` raises **after** `open(path,'w')` has already truncated the file to a bare header. That has happened once, and only a backup saved the ratings.
+
+   **Write to a temp file, verify, then swap.** Never write in place. `config/connections.csv` is gitignored hand-entered judgment — there is no git history to recover it from, and no way to regenerate the ratings.
 
    ```bash
    python3 - <<'PY'
-   import csv, json, sys
-   rows = json.loads(sys.stdin.read())  # list of dicts
-   with open('config/connections.csv', 'w', newline='') as f:
-       w = csv.DictWriter(f, fieldnames=['linkedin_url','name','headline','rating','last_interaction','notes'])
-       w.writeheader()
-       for r in rows:
-           w.writerow(r)
+   import csv, json, sys, os
+
+   SRC = 'config/connections.csv'
+   DEFAULT = ['linkedin_url','name','headline','rating','last_interaction','notes']
+
+   fields = DEFAULT
+   if os.path.exists(SRC):
+       with open(SRC) as f:
+           fields = csv.DictReader(f).fieldnames or DEFAULT   # the file's own schema wins
+
+   rows = json.loads(sys.stdin.read())          # merged rows, dicts
+   rows.sort(key=lambda r: (r.get('name') or '').lower())
+
+   # Preserve any column this skill doesn't know about (don't drop what you didn't write).
+   for r in rows:
+       for k in fields:
+           r.setdefault(k, '')
+
+   tmp = SRC + '.tmp'
+   with open(tmp, 'w', newline='') as f:
+       w = csv.DictWriter(f, fieldnames=fields, quoting=csv.QUOTE_MINIMAL, extrasaction='ignore')
+       w.writeheader(); w.writerows(rows)
+
+   check = list(csv.DictReader(open(tmp)))      # verify before it goes near the real file
+   assert len(check) == len(rows), f'row count changed: {len(check)} != {len(rows)}'
+   assert all(len(r) == len(fields) for r in check), 'ragged row'
+   os.replace(tmp, SRC)                         # atomic
+   print(f'wrote {len(check)} rows, {len(fields)} columns')
    PY
    ```
 
-   Pipe the JSON payload of merged rows into stdin. Sort the rows by `name` ascending before writing — it makes the CSV easier to scan by hand in Excel.
+   Pipe the JSON payload of merged rows into stdin. Rows sort by `name` ascending — it makes the CSV easier to scan by hand in Excel.
+
+4. **Back up before the first write of a session** if the file already exists: `cp config/connections.csv config/connections.csv.bak-$(date +%Y%m%d-%H%M%S)`. It's gitignored, so the backup stays local. Cheap insurance on the one file here that can't be regenerated.
 
 ---
 
@@ -216,7 +251,7 @@ LinkedIn connections sync — done.
   Total scraped: 487
   Already in CSV: 412 (ratings preserved)
   Newly added: 75
-  Seeded as High from meetings.csv: 12
+  Seeded as High from meetings log: 12
   Now in config/connections.csv: 487 rows
     High: 31 / Medium: 22 / Low: 14 / Unrated: 420
 ```

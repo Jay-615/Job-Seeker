@@ -10,6 +10,10 @@ what `/setup` would write.*
 - Phone: (206) 555-0142
 - Location: Seattle, WA
 - Base resume path: /Users/samchen/Documents/Resumes/sam-chen-resume.md
+# Optional. If you keep a log of people you've actually spoken to, point at it here and
+# /build-connections will seed those contacts as High instead of making you re-rate them.
+# Needs a `contact_name` column. Delete this line if you don't have one.
+- meetings_seed_path: /Users/samchen/Documents/networking/meetings.csv
 
 ## Scoring Weights
 - Experience match: 0.5
