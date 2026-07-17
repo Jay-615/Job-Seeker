@@ -11,6 +11,35 @@ This is the most-likely-to-break skill in the project because it depends on Link
 
 ---
 
+## Data source — prefer `config/company_connections.csv`
+
+`/map-company-connections` is now the canonical way to **find and document** Jay's connections at a
+company. This skill's job is **scoring**, not re-discovery — so lean on that table when it exists.
+
+**Before any 2nd-degree scraping (Step 4), check `config/company_connections.csv` for rows where
+`company` == this company.** If a block exists, derive the network signal from it instead of the live
+page-1 scrape. It is strictly more complete: `/map-company-connections` paginates all pages and
+**drills the "…and N other mutual connections" truncation** that this skill's page-1 scrape silently
+misses — a High-rated bridge hidden in a "+21 others" tail would otherwise be lost, undercounting the
+bonus. From the block, compute:
+
+- `second_degree_count` = number of rows for the company (still a floor if the map run hit LinkedIn's
+  ~100 cap — say so in `reasoning`).
+- `first_degree_mutuals_top` = aggregate the `bridge_connections` cells across the rows into a
+  `{name -> count}` frequency map; take each name's `rating` from `config/connections.csv`.
+- `bonus_score` and `warmest_paths` per Steps 5–6 using those rated bridges.
+- `data_source: "company_connections.csv (mapped <scanned_date>)"`.
+
+Still get `first_degree_count` from the company People page (Step 3a) — `company_connections.csv` only
+holds 2nd-degrees (`network=["S"]`). Keep the Step 7 output shape identical either way; `/score-jobs`
+reads it programmatically.
+
+If the company has **no block** in `company_connections.csv`, fall back to the live scrape in Steps
+3–4 as written, and note in `reasoning` that running `/map-company-connections <company>` would give a
+fuller, drill-in-complete picture.
+
+---
+
 ## Parameters
 
 - **company name** (required) — e.g., `/network-check Nike`. Accept multi-word names (`/network-check "Columbia Sportswear"`).

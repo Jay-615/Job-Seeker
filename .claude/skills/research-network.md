@@ -13,6 +13,26 @@ Browser logic mirrors `/network-check`'s patterns — same LinkedIn People searc
 
 ---
 
+## Data source — prefer `config/company_connections.csv`
+
+`/map-company-connections` is now the canonical connection-finder/documenter, and its output table
+`config/company_connections.csv` is the preferred **candidate pool** for this skill. This skill's job
+is the expensive part map deliberately doesn't do: **per-profile area-relevance judgment and the
+outreach plan.**
+
+In **Step 6 (build the candidate pool)**, first check `config/company_connections.csv` for rows where
+`company` == this company. If a block exists, use it as the candidate pool instead of re-running the
+2nd-degree People search — each row already carries the person's name, title, profile URL, the full
+**drill-in-complete** `bridge_connections` list (no hidden warm bridge), and `bridge_best_rating`.
+Rank candidates by `bridge_best_rating` (High>Medium>Low>Unrated) crossed with headline
+area-relevance, then continue to Step 7 (visit the shortlist for the area read) and Step 8 (Top-3
+plan) exactly as written — those steps are the value this skill adds on top of the table.
+
+Fall back to the live 2nd-degree scrape only if the company has no block; suggest running
+`/map-company-connections <company>` first for the complete bridge picture.
+
+---
+
 ## Parameters
 
 - **rank** (integer like `1`) — looked up in the most recent `jobs/scored/dashboard-*.md`, OR
